@@ -107,11 +107,13 @@ def create_comparison_plots(baseline_df, distillation_df):
         
         # Create plots for this parent model
         parent_metrics_df = load_parent_model_metrics(parent_model)
-        create_parent_model_plots(merged_df, parent_model, output_dir)
+        create_parent_model_plots(merged_df, parent_model, output_dir, parent_metrics_df)
 
 
-def create_parent_model_plots(merged_df, parent_model, output_dir):
+def create_parent_model_plots(merged_df, parent_model, output_dir, parent_metrics_df=None):
     """Create plots for a specific parent model."""
+    if parent_metrics_df is None:
+        parent_metrics_df = pd.DataFrame(columns=['dataset', 'numshot', 'parent_auc'])
     
     # 3 horizontal subplots for each parent model
     plt.figure(figsize=(21, 6))
@@ -241,6 +243,21 @@ def create_parent_model_plots(merged_df, parent_model, output_dir):
         plt.plot(distill_x, distill_y, 
                 color='red', linestyle='-', marker='s', alpha=0.8,
                 label='Distillation (ours)', linewidth=3, markersize=8)
+
+    # Plot parent model performance averaged across datasets
+    if not parent_metrics_df.empty:
+        parent_shot = parent_metrics_df.groupby('numshot')['parent_auc'].mean().reset_index()
+        parent_x = []
+        parent_y = []
+        for _, row in parent_shot.iterrows():
+            if row['numshot'] in shot_values:
+                parent_x.append(row['numshot'])
+                parent_y.append(row['parent_auc'])
+        if parent_x:
+            parent_y = np.array(parent_y)
+            plt.plot(parent_x, parent_y,
+                     color='green', linestyle='-.', marker='^', alpha=0.8,
+                     label=f'{display_name} (teacher)', linewidth=3, markersize=8)
     # Set minor ticks for all shot values but only label the specified ones
     plt.gca().set_xticks(shot_values, minor=True)
     plt.gca().set_xticks(xtick_values, minor=False)
