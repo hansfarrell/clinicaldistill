@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.optim
 from torch import Tensor
+from torch.utils.data import DataLoader, TensorDataset
 
 import sys
 from pathlib import Path
@@ -78,6 +79,13 @@ def main():
     ).to(device)
     
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer,
+        mode='min',
+        factor=0.5,
+        patience=20,
+        min_lr=5e-5
+    )
     
     # Training
     @torch.inference_mode()
@@ -89,14 +97,44 @@ def main():
         y_true = y_true.repeat_interleave(model.backbone.k)
         return nn.functional.cross_entropy(y_pred, y_true)
 
-    for epoch in range(500): # Max epochs
+    train_dataset = TensorDataset(X_few_tensor, y_few_tensor)
+    batch_size = max(1, min(128, len(train_dataset)))
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+    max_epochs = 500
+    early_stop_patience = 60
+    best_loss = float('inf')
+    patience_counter = 0
+
+    for epoch in range(max_epochs):
         model.train()
-        optimizer.zero_grad()
-        
-        y_pred_train = model(X_few_tensor, None).squeeze(-1).float()
-        loss = loss_fn(y_pred_train, y_few_tensor)
-        loss.backward()
-        optimizer.step()
+        epoch_loss = 0.0
+        for batch_X, batch_y in train_loader:
+            optimizer.zero_grad()
+            batch_X = batch_X.to(device)
+            batch_y = batch_y.to(device)
+            y_pred_train = model(batch_X, None).squeeze(-1).float()
+            loss = loss_fn(y_pred_train, batch_y)
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
+            epoch_loss += loss.item() * batch_X.size(0)
+
+        epoch_loss /= len(train_dataset)
+        scheduler.step(epoch_loss)
+
+        if epoch_loss + 1e-6 < best_loss:
+            best_loss = epoch_loss
+            patience_counter = 0
+        else:
+            patience_counter += 1
+
+        if patience_counter >= early_stop_patience:
+            print(f"Early stopping at epoch {epoch+1}: loss={epoch_loss:.4f}")
+            break
+
+        if (epoch + 1) % 50 == 0 or epoch == 0:
+            print(f"Epoch {epoch+1}/{max_epochs} - loss: {epoch_loss:.4f}")
 
     # Inference
     model.eval()

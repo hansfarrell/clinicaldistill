@@ -45,13 +45,22 @@ def compile_distillation_results(base_dir="eval_res", output_csv="distillation_r
                             with open(results_file, 'r') as f:
                                 content = f.read()
                             
-                            # Extract mean AUC and mean complexity
+                            # Extract mean AUC, mean F1, std AUC, std F1, and mean complexity
                             mean_auc = None
+                            mean_f1 = None
+                            std_auc = None
+                            std_f1 = None
                             mean_complexity = None
                             
                             for line in content.split('\n'):
                                 if line.startswith('Mean AUC:'):
                                     mean_auc = float(line.split(':')[1].strip())
+                                elif line.startswith('Mean F1:'):
+                                    mean_f1 = float(line.split(':')[1].strip())
+                                elif line.startswith('Std AUC:'):
+                                    std_auc = float(line.split(':')[1].strip())
+                                elif line.startswith('Std F1:'):
+                                    std_f1 = float(line.split(':')[1].strip())
                                 elif line.startswith('Mean Complexity:'):
                                     complexity_str = line.split(':')[1].strip()
                                     if complexity_str != 'N/A':
@@ -64,6 +73,9 @@ def compile_distillation_results(base_dir="eval_res", output_csv="distillation_r
                                 'numshot': int(numshot),
                                 'student_model': student_model,
                                 'mean_auc': mean_auc,
+                                'std_auc': std_auc,
+                                'mean_f1': mean_f1,
+                                'std_f1': std_f1,
                                 'mean_complexity': mean_complexity
                             }
                             all_results.append(result)
@@ -140,13 +152,22 @@ def compile_baseline_results(base_dir="eval_res/baselines", output_csv="baseline
                         with open(results_file, 'r') as f:
                             content = f.read()
                         
-                        # Extract mean AUC and mean complexity
+                        # Extract mean AUC, mean F1, std AUC, std F1, and mean complexity
                         mean_auc = None
+                        mean_f1 = None
+                        std_auc = None
+                        std_f1 = None
                         mean_complexity = None
                         
                         for line in content.split('\n'):
                             if line.startswith('Mean AUC:'):
                                 mean_auc = float(line.split(':')[1].strip())
+                            elif line.startswith('Mean F1:'):
+                                mean_f1 = float(line.split(':')[1].strip())
+                            elif line.startswith('Std AUC:'):
+                                std_auc = float(line.split(':')[1].strip())
+                            elif line.startswith('Std F1:'):
+                                std_f1 = float(line.split(':')[1].strip())
                             elif line.startswith('Mean Complexity:'):
                                 complexity_str = line.split(':')[1].strip()
                                 if complexity_str != 'N/A':
@@ -158,6 +179,9 @@ def compile_baseline_results(base_dir="eval_res/baselines", output_csv="baseline
                             'numshot': int(numshot),
                             'baseline_model': baseline_model,
                             'mean_auc': mean_auc,
+                            'std_auc': std_auc,
+                            'mean_f1': mean_f1,
+                            'std_f1': std_f1,
                             'mean_complexity': mean_complexity
                         }
                         all_results.append(result)
@@ -299,6 +323,186 @@ def perform_wilcoxon_test(output_file="wilcoxon_test.txt"):
     
     print(f"\nResults saved to: {output_file}")
 
+
+def generate_latex_tables(baseline_csv='baseline_results.csv', 
+                          distillation_csv='distillation_results.csv',
+                          output_file='results_tables.tex'):
+    """
+    Generate LaTeX tables for k=4, 32, and 256 shots.
+    Each table shows Dataset, Student Model, Baseline, TabPFN, and TabM results.
+    """
+    # Load the data
+    baseline_df = pd.read_csv(baseline_csv)
+    distillation_df = pd.read_csv(distillation_csv)
+    
+    # Get unique datasets
+    datasets = sorted(distillation_df['dataset'].unique())
+    
+    # Student model mapping for better display names
+    model_name_map = {
+        'ttnet': 'TT',
+        'xgboost': 'XGB',
+        'logistic_rule_regression': 'LRR',
+        'decision_tree': 'DT'
+    }
+    
+    # Dataset name mapping for better display
+    dataset_name_map = {
+        'breastcancer': 'Breast',
+        'breastcancer2': 'Breast 2',
+        'respiratory': 'Respiratory',
+        'diabetes': 'Diabetes',
+        'heart': 'Heart',
+        'coloncancer': 'Colon',
+        'chemotherapy': 'Chemo'
+    }
+    
+    student_models = ['ttnet', 'xgboost', 'logistic_rule_regression', 'decision_tree']
+    shots = [4, 32, 256]
+    
+    latex_output = []
+    
+    for k in shots:
+        latex_output.append(f"% Table for k={k} shots")
+        latex_output.append("\\begin{table}")
+        latex_output.append("\\centering")
+        latex_output.append(f"\\caption{{Results for $k={k}$ shots. Mean AUC with standard deviation shown as superscript.}}")
+        latex_output.append(f"\\label{{tab:results_k{k}}}")
+        latex_output.append("\\setlength{\\tabcolsep}{3pt}")
+        latex_output.append("\\begin{tabular}{llccc}")
+        latex_output.append("\\toprule")
+        latex_output.append("Dataset & Student & Baseline & TabPFN & TabM \\\\")
+        latex_output.append("\\midrule")
+        
+        for dataset in datasets:
+            dataset_display = dataset_name_map.get(dataset, dataset.replace('_', ' ').title())
+            
+            for idx, student_model in enumerate(student_models):
+                model_display = model_name_map.get(student_model, student_model)
+                
+                # Get baseline results
+                baseline_row = baseline_df[
+                    (baseline_df['dataset'] == dataset) & 
+                    (baseline_df['numshot'] == k) & 
+                    (baseline_df['baseline_model'] == student_model)
+                ]
+                
+                baseline_auc = None
+                if len(baseline_row) > 0:
+                    baseline_auc = baseline_row['mean_auc'].values[0]
+                    baseline_std = baseline_row['std_auc'].values[0]
+                
+                # Get TabPFN results
+                tabpfn_row = distillation_df[
+                    (distillation_df['dataset'] == dataset) & 
+                    (distillation_df['numshot'] == k) & 
+                    (distillation_df['student_model'] == student_model) &
+                    (distillation_df['parent_model'] == 'tabpfn')
+                ]
+                
+                tabpfn_auc = None
+                if len(tabpfn_row) > 0:
+                    tabpfn_auc = tabpfn_row['mean_auc'].values[0]
+                    tabpfn_std = tabpfn_row['std_auc'].values[0]
+                
+                # Get TabM results
+                tabm_row = distillation_df[
+                    (distillation_df['dataset'] == dataset) & 
+                    (distillation_df['numshot'] == k) & 
+                    (distillation_df['student_model'] == student_model) &
+                    (distillation_df['parent_model'] == 'tabm')
+                ]
+                
+                tabm_auc = None
+                if len(tabm_row) > 0:
+                    tabm_auc = tabm_row['mean_auc'].values[0]
+                    tabm_std = tabm_row['std_auc'].values[0]
+                
+                # Find the best AUC
+                aucs = []
+                if baseline_auc is not None:
+                    aucs.append(baseline_auc)
+                if tabpfn_auc is not None:
+                    aucs.append(tabpfn_auc)
+                if tabm_auc is not None:
+                    aucs.append(tabm_auc)
+                
+                best_auc = max(aucs) if aucs else None
+                
+                # Format baseline string
+                if baseline_auc is not None:
+                    is_best = best_auc is not None and baseline_auc == best_auc
+                    if pd.notna(baseline_std):
+                        if is_best:
+                            baseline_str = f"$\\mathbf{{{baseline_auc:.3f}^{{{baseline_std:.3f}}}}}$"
+                        else:
+                            baseline_str = f"${baseline_auc:.3f}^{{{baseline_std:.3f}}}$"
+                    else:
+                        if is_best:
+                            baseline_str = f"$\\mathbf{{{baseline_auc:.3f}}}$"
+                        else:
+                            baseline_str = f"${baseline_auc:.3f}$"
+                else:
+                    baseline_str = "---"
+                
+                # Format TabPFN string
+                if tabpfn_auc is not None:
+                    is_best = best_auc is not None and tabpfn_auc == best_auc
+                    if pd.notna(tabpfn_std):
+                        if is_best:
+                            tabpfn_str = f"$\\mathbf{{{tabpfn_auc:.3f}^{{{tabpfn_std:.3f}}}}}$"
+                        else:
+                            tabpfn_str = f"${tabpfn_auc:.3f}^{{{tabpfn_std:.3f}}}$"
+                    else:
+                        if is_best:
+                            tabpfn_str = f"$\\mathbf{{{tabpfn_auc:.3f}}}$"
+                        else:
+                            tabpfn_str = f"${tabpfn_auc:.3f}$"
+                else:
+                    tabpfn_str = "---"
+                
+                # Format TabM string
+                if tabm_auc is not None:
+                    is_best = best_auc is not None and tabm_auc == best_auc
+                    if pd.notna(tabm_std):
+                        if is_best:
+                            tabm_str = f"$\\mathbf{{{tabm_auc:.3f}^{{{tabm_std:.3f}}}}}$"
+                        else:
+                            tabm_str = f"${tabm_auc:.3f}^{{{tabm_std:.3f}}}$"
+                    else:
+                        if is_best:
+                            tabm_str = f"$\\mathbf{{{tabm_auc:.3f}}}$"
+                        else:
+                            tabm_str = f"${tabm_auc:.3f}$"
+                else:
+                    tabm_str = "---"
+                
+                # Build the row
+                if idx == 0:
+                    # First row for this dataset - include dataset name with multirow
+                    latex_output.append(f"\\multirow{{{len(student_models)}}}{{*}}{{{dataset_display}}} & {model_display} & {baseline_str} & {tabpfn_str} & {tabm_str} \\\\")
+                else:
+                    # Subsequent rows - no dataset name
+                    latex_output.append(f"& {model_display} & {baseline_str} & {tabpfn_str} & {tabm_str} \\\\")
+            
+            # Add a line between datasets (except after the last one)
+            if dataset != datasets[-1]:
+                latex_output.append("\\cmidrule(lr){1-5}")
+        
+        latex_output.append("\\bottomrule")
+        latex_output.append("\\end{tabular}")
+        latex_output.append("\\end{table}")
+        latex_output.append("")
+        latex_output.append("")
+    
+    # Write to file
+    with open(output_file, 'w') as f:
+        f.write('\n'.join(latex_output))
+    
+    print(f"LaTeX tables saved to: {output_file}")
+    print(f"Generated {len(shots)} tables for k={shots}")
+
+
 if __name__ == "__main__":
     # Compile all distillation results into a single CSV
     print("Compiling distillation results...")
@@ -328,3 +532,12 @@ if __name__ == "__main__":
     print("\n" + "="*50)
     print("Performing Wilcoxon signed-rank test...")
     perform_wilcoxon_test(output_file='wilcoxon_test.txt')
+    
+    # Generate LaTeX tables
+    print("\n" + "="*50)
+    print("Generating LaTeX tables...")
+    generate_latex_tables(
+        baseline_csv='baseline_results.csv',
+        distillation_csv='distillation_results.csv',
+        output_file='results_tables.tex'
+    )
