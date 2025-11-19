@@ -3,7 +3,8 @@ import pandas as pd
 import numpy as np
 import re
 from collections import defaultdict
-from scipy.stats import wilcoxon
+from scipy.stats import wilcoxon, friedmanchisquare
+import scikit_posthocs as sp
 
 
 def compile_distillation_results(base_dir="eval_res", output_csv="distillation_results.csv"):
@@ -324,6 +325,132 @@ def perform_wilcoxon_test(output_file="wilcoxon_test.txt"):
     print(f"\nResults saved to: {output_file}")
 
 
+def perform_friedman_nemenyi_test(baseline_csv='baseline_results.csv', 
+                                   distillation_csv='distillation_results.csv',
+                                   output_file='friedman_nemenyi_test.txt'):
+    """
+    Perform Friedman test with Nemenyi post-hoc to compare baseline, TabPFN distillation, 
+    and TabM distillation across different datasets and shot configurations.
+    """
+    # Load data
+    baseline_df = pd.read_csv(baseline_csv)
+    distillation_df = pd.read_csv(distillation_csv)
+    
+    # Prepare baseline data
+    base_subset = baseline_df[['dataset', 'numshot', 'baseline_model', 'mean_auc']].copy()
+    base_subset = base_subset.rename(columns={'baseline_model': 'student_model'})
+    base_subset['strategy'] = 'Baseline'
+    
+    # Prepare TabPFN distillation data
+    tabpfn_subset = distillation_df[distillation_df['parent_model'] == 'tabpfn'][
+        ['dataset', 'numshot', 'student_model', 'mean_auc']
+    ].copy()
+    tabpfn_subset['strategy'] = 'TabPFN'
+    
+    # Prepare TabM distillation data
+    tabm_subset = distillation_df[distillation_df['parent_model'] == 'tabm'][
+        ['dataset', 'numshot', 'student_model', 'mean_auc']
+    ].copy()
+    tabm_subset['strategy'] = 'TabM'
+    
+    # Combine all data
+    full_df = pd.concat([base_subset, tabpfn_subset, tabm_subset], ignore_index=True)
+    
+    # Pivot to get matrix: Rows=(dataset, numshot, student_model), Columns=strategy
+    # Each (dataset, numshot, student_model) combination is treated as a "block" for repeated measures
+    df_pivot = full_df.pivot_table(
+        index=['dataset', 'numshot', 'student_model'],
+        columns='strategy',
+        values='mean_auc'
+    ).dropna()
+    
+    # Ensure column order is consistent
+    df_pivot = df_pivot[['Baseline', 'TabPFN', 'TabM']]
+    
+    output_lines = []
+    output_lines.append("Friedman Test with Nemenyi Post-Hoc Analysis")
+    
+    # Perform Friedman test
+    stat, p = friedmanchisquare(*[df_pivot[col] for col in df_pivot.columns])
+    
+    output_lines.append("Friedman Test Results:")
+    output_lines.append("-" * 60)
+    output_lines.append(f"Test statistic: {stat:.3f}")
+    output_lines.append(f"p-value: {p:.6e}")
+    output_lines.append(f"Significance level: 0.05")
+    output_lines.append("")
+    
+    if p < 0.05:
+        output_lines.append("Conclusion: Reject null hypothesis - significant differences found between strategies.")
+        output_lines.append("")
+        
+        # Perform Nemenyi post-hoc test
+        output_lines.append("Nemenyi Post-Hoc Test Results:")
+        output_lines.append("-" * 60)
+        
+        # Prepare data for Nemenyi test
+        df_long = df_pivot.reset_index()
+        df_long['block_id'] = np.arange(len(df_long))
+        
+        # Convert numshot to integer to avoid type issues
+        df_long['numshot'] = df_long['numshot'].astype(int)
+        
+        df_melted = df_long.melt(
+            id_vars=['block_id'],  # Only use block_id as id_var to avoid type issues
+            value_vars=['Baseline', 'TabPFN', 'TabM'],
+            var_name='strategy',
+            value_name='auc'
+        )
+        
+        # Ensure correct types
+        df_melted['block_id'] = df_melted['block_id'].astype(int)
+        df_melted['auc'] = pd.to_numeric(df_melted['auc'], errors='coerce')
+        
+        # Drop any NaN values
+        df_melted = df_melted.dropna()
+        
+        nemenyi_results = sp.posthoc_nemenyi_friedman(
+            df_melted, 
+            y_col='auc', 
+            group_col='strategy', 
+            block_col='block_id',
+            block_id_col='block_id',
+            melted=True
+        )
+        
+        output_lines.append("\nPairwise p-values:")
+        output_lines.append(nemenyi_results.to_string())
+        output_lines.append("")
+        
+        # Calculate and display average ranks
+        output_lines.append("\nAverage Ranks (lower is better):")
+        ranks = df_pivot.rank(axis=1, ascending=False).mean()
+        for strategy, rank in ranks.items():
+            output_lines.append(f"  {strategy}: {rank:.3f}")
+        output_lines.append("")
+        
+        # Interpret pairwise comparisons
+        output_lines.append("Pairwise Comparison Interpretations (level=0.05):")
+        strategies = df_pivot.columns.tolist()
+        for i, strat1 in enumerate(strategies):
+            for j, strat2 in enumerate(strategies):
+                if i < j:
+                    p_val = nemenyi_results.loc[strat1, strat2]
+                    if p_val < 0.05:
+                        output_lines.append(f"  {strat1} vs {strat2}: Significant difference (p={p_val:.4f})")
+                    else:
+                        output_lines.append(f"  {strat1} vs {strat2}: No significant difference (p={p_val:.4f})")
+        
+    else:
+        output_lines.append("Conclusion: Failed to reject null hypothesis - no significant differences found between strategies.")
+    
+    # Write to file
+    with open(output_file, 'w') as f:
+        f.write('\n'.join(output_lines))
+    
+    print(f"\nFriedman-Nemenyi test results saved to: {output_file}")
+
+
 def generate_latex_tables(baseline_csv='baseline_results.csv', 
                           distillation_csv='distillation_results.csv',
                           output_file='results_tables.tex'):
@@ -358,7 +485,7 @@ def generate_latex_tables(baseline_csv='baseline_results.csv',
     }
     
     student_models = ['ttnet', 'xgboost', 'logistic_rule_regression', 'decision_tree']
-    shots = [4, 32, 256]
+    shots = [4, 8, 16, 32, 64, 128, 256]
     
     latex_output = []
     
@@ -495,12 +622,101 @@ def generate_latex_tables(baseline_csv='baseline_results.csv',
         latex_output.append("")
         latex_output.append("")
     
+    # Generate complexity table
+    latex_output.append("")
+    latex_output.append("% Complexity table showing mean complexity across different shots")
+    latex_output.append("\\begin{table}")
+    latex_output.append("\\centering")
+    latex_output.append("\\caption{Mean complexity of student models across different shot configurations.}")
+    latex_output.append("\\label{tab:complexity}")
+    latex_output.append("\\setlength{\\tabcolsep}{2pt}")
+    latex_output.append("\\begin{tabular}{llccccccc}")
+    latex_output.append("\\toprule")
+    latex_output.append("Dataset & Student & \\multicolumn{7}{c}{Shots} \\\\")
+    latex_output.append("& & 4 & 8 & 16 & 32 & 64 & 128 & 256 \\\\")
+    latex_output.append("\\midrule")
+    
+    for dataset in datasets:
+        dataset_display = dataset_name_map.get(dataset, dataset.replace('_', ' ').title())
+        
+        for idx, student_model in enumerate(student_models):
+            model_display = model_name_map.get(student_model, student_model)
+            
+            # Get complexity for each shot size, averaging over baseline, tabpfn, and tabm
+            complexities = {}
+            complexity_stds = {}
+            for k in shots:
+                complexity_values = []
+                
+                # Get baseline complexity
+                baseline_row = baseline_df[
+                    (baseline_df['dataset'] == dataset) & 
+                    (baseline_df['numshot'] == k) & 
+                    (baseline_df['baseline_model'] == student_model)
+                ]
+                if len(baseline_row) > 0 and pd.notna(baseline_row['mean_complexity'].values[0]):
+                    complexity_values.append(baseline_row['mean_complexity'].values[0])
+                
+                # Get TabPFN distillation complexity
+                tabpfn_row = distillation_df[
+                    (distillation_df['dataset'] == dataset) & 
+                    (distillation_df['numshot'] == k) & 
+                    (distillation_df['student_model'] == student_model) &
+                    (distillation_df['parent_model'] == 'tabpfn')
+                ]
+                if len(tabpfn_row) > 0 and pd.notna(tabpfn_row['mean_complexity'].values[0]):
+                    complexity_values.append(tabpfn_row['mean_complexity'].values[0])
+                
+                # Get TabM distillation complexity
+                tabm_row = distillation_df[
+                    (distillation_df['dataset'] == dataset) & 
+                    (distillation_df['numshot'] == k) & 
+                    (distillation_df['student_model'] == student_model) &
+                    (distillation_df['parent_model'] == 'tabm')
+                ]
+                if len(tabm_row) > 0 and pd.notna(tabm_row['mean_complexity'].values[0]):
+                    complexity_values.append(tabm_row['mean_complexity'].values[0])
+                
+                # Calculate mean and std of complexities
+                if complexity_values:
+                    complexities[k] = np.mean(complexity_values)
+                    complexity_stds[k] = np.std(complexity_values) if len(complexity_values) > 1 else 0.0
+                else:
+                    complexities[k] = None
+                    complexity_stds[k] = None
+            
+            # Format complexity strings
+            complexity_strs = []
+            for k in shots:
+                if complexities[k] is not None:
+                    mean_val = complexities[k]
+                    # Round to nearest integer
+                    complexity_strs.append(f"{int(round(mean_val))}")
+                else:
+                    complexity_strs.append("---")
+            
+            # Build the row
+            if idx == 0:
+                # First row for this dataset - include dataset name with multirow
+                latex_output.append(f"\\multirow{{{len(student_models)}}}{{*}}{{{dataset_display}}} & {model_display} & {complexity_strs[0]} & {complexity_strs[1]} & {complexity_strs[2]} & {complexity_strs[3]} & {complexity_strs[4]} & {complexity_strs[5]} & {complexity_strs[6]} \\\\")
+            else:
+                # Subsequent rows - no dataset name
+                latex_output.append(f"& {model_display} & {complexity_strs[0]} & {complexity_strs[1]} & {complexity_strs[2]} & {complexity_strs[3]} & {complexity_strs[4]} & {complexity_strs[5]} & {complexity_strs[6]} \\\\")
+        
+        # Add a line between datasets (except after the last one)
+        if dataset != datasets[-1]:
+            latex_output.append("\\cmidrule(lr){1-9}")
+    
+    latex_output.append("\\bottomrule")
+    latex_output.append("\\end{tabular}")
+    latex_output.append("\\end{table}")
+    
     # Write to file
     with open(output_file, 'w') as f:
         f.write('\n'.join(latex_output))
     
     print(f"LaTeX tables saved to: {output_file}")
-    print(f"Generated {len(shots)} tables for k={shots}")
+    print(f"Generated {len(shots)} tables for k={shots} plus 1 complexity table")
 
 
 if __name__ == "__main__":
@@ -532,6 +748,15 @@ if __name__ == "__main__":
     print("\n" + "="*50)
     print("Performing Wilcoxon signed-rank test...")
     perform_wilcoxon_test(output_file='wilcoxon_test.txt')
+    
+    # Perform Friedman test with Nemenyi post-hoc
+    print("\n" + "="*50)
+    print("Performing Friedman test with Nemenyi post-hoc analysis...")
+    perform_friedman_nemenyi_test(
+        baseline_csv='baseline_results.csv',
+        distillation_csv='distillation_results.csv',
+        output_file='friedman_nemenyi_test.txt'
+    )
     
     # Generate LaTeX tables
     print("\n" + "="*50)
