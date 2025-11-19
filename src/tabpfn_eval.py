@@ -19,13 +19,14 @@ from baselines.utils_baselines import set_seed
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, required=True)
-    parser.add_argument("--numshot", type=int, required=True)
+    parser.add_argument("--numshot", type=str, required=True)  # Changed to str to handle 'all'
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", type=str, default="cuda")
     args = parser.parse_args()
 
     dataset_name = args.dataset
-    num_shot = args.numshot
+    # Convert numshot to int if it's not 'all'
+    num_shot = args.numshot if args.numshot.lower() == 'all' else int(args.numshot)
     seed = args.seed
     device = args.device
 

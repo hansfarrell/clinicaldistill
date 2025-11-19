@@ -13,7 +13,7 @@ run_experiment() {
 
 # Create arrays of all experiments
 datasets=(breastcancer breastcancer2 chemotherapy coloncancer diabetes heart respiratory)
-numshots=(4 8 16 32 64 128 256)
+numshots=(4 8 16 32 64 128 256 all)
 
 # Create array of all experiment combinations
 experiments=()

@@ -20,22 +20,31 @@ from aix360.algorithms.rbm import FeatureBinarizer, LogisticRuleRegression
 from src.utils.helper import get_few_shot_from_csv
 from baselines.utils_baselines import set_seed
 from src.ttnet.ttnet_wrapper import TTnetStudentModel, TTNetPreprocessor 
+from rrl.utils import RRLWrapper
 
 SEEDS = [0, 1, 6, 7, 8]
 
-def main(dataset_name, numshot, parent_model, student_model_name, device='cpu'):
-    print(f"Starting {student_model_name} on {dataset_name}, {numshot}-shot, parent: {parent_model}")
+def main(dataset_name, numshot, parent_model, student_model_name, device='cpu', gpu_id=None):
+    # Convert numshot to string if it's 'all' for display purposes
+    numshot_str = numshot if isinstance(numshot, str) else str(numshot)
+    print(f"Starting {student_model_name} on {dataset_name}, {numshot_str}-shot, parent: {parent_model}")
     info_path = f"dataset/{dataset_name}/{dataset_name}.info"
+    
+    # If gpu_id is provided, use it for single-GPU models (RRL, TTNet)
+    if gpu_id is not None and device.startswith('cuda'):
+        device_for_model = f'cuda:{gpu_id}'
+    else:
+        device_for_model = device
 
     # Check if results already exist
-    result_dir = f"eval_res/{parent_model}/{dataset_name}/{numshot}_shot/{student_model_name}"
+    result_dir = f"eval_res/{parent_model}/{dataset_name}/{numshot_str}_shot/{student_model_name}"
     results_path = os.path.join(result_dir, "results.txt")
     if os.path.exists(results_path):
         print(f"Results already exist at {results_path}, skipping...")
         return None
 
     # Check if synthetic data directory exists
-    synth_dir = f"eval_res/{parent_model}/{dataset_name}/{numshot}_shot"
+    synth_dir = f"eval_res/{parent_model}/{dataset_name}/{numshot_str}_shot"
     if not os.path.exists(synth_dir):
         print(f"Synthetic data directory does not exist: {synth_dir}, skipping...")
         return None
@@ -89,6 +98,7 @@ def main(dataset_name, numshot, parent_model, student_model_name, device='cpu'):
             }
             xgb_kwargs = {'eval_metric': 'logloss', 'tree_method': 'hist', 'random_state': seed}
             if device.startswith('cuda'):
+                # XGBoost will automatically use all visible GPUs
                 xgb_kwargs['device'] = 'cuda'
             model = xgb.XGBClassifier(**xgb_kwargs)
         elif student_model_name == 'logistic_regression':
@@ -121,7 +131,10 @@ def main(dataset_name, numshot, parent_model, student_model_name, device='cpu'):
             model.fit(X_synth_fb, y_synth)
         elif student_model_name == 'ttnet':
             features_size = X_synth_proc.shape[1]
-            model = TTnetStudentModel(features_size=features_size, index=synth_index, device=device)
+            model = TTnetStudentModel(features_size=features_size, index=synth_index, device=device_for_model)
+        elif student_model_name == 'rrl':
+            features_size = X_synth_proc.shape[1]
+            model = RRLWrapper(features_size=features_size, index=synth_index, device=device_for_model)
 
         # Fit the model
         if student_model_name not in ['logistic_rule_regression']: # LRR is already fitted
@@ -138,6 +151,10 @@ def main(dataset_name, numshot, parent_model, student_model_name, device='cpu'):
             y_pred = (y_pred_proba >= 0.5).astype(int)
         elif student_model_name == 'ttnet':
             # TTNet returns 1D array of probabilities
+            y_pred_proba = model.predict_proba(X_test_proc)
+            y_pred = (y_pred_proba >= 0.5).astype(int)
+        elif student_model_name == 'rrl':
+            # RRL also returns 1D array of probabilities
             y_pred_proba = model.predict_proba(X_test_proc)
             y_pred = (y_pred_proba >= 0.5).astype(int)
         else:
@@ -172,6 +189,12 @@ def main(dataset_name, numshot, parent_model, student_model_name, device='cpu'):
             condition = np.sum([x.count("AND") for x in explanation["rule"].to_numpy().tolist() if isinstance(x, str)]) + Rule
             complexity = Rule + condition
         elif student_model_name == 'ttnet':
+            rule_info = model.extract_rules() 
+            if rule_info is not None and 'complexity' in rule_info:
+                complexity = rule_info['complexity']
+            else:
+                complexity = None
+        elif student_model_name == 'rrl':
             rule_info = model.extract_rules() 
             if rule_info is not None and 'complexity' in rule_info:
                 complexity = rule_info['complexity']
@@ -216,30 +239,44 @@ def main(dataset_name, numshot, parent_model, student_model_name, device='cpu'):
     return results
 
 if __name__ == '__main__':
-    device = 'cuda:0'  # 'cpu', 'cuda:0'
+    device = 'cuda:0,1,2,3'  # 'cpu', 'cuda:0', 'cuda:0,1,2,3' for multi-GPU
     # numshots = [4, 8, 16, 32, 64, 128, 256]
-    numshots = [4, 8, 16, 32, 64, 128, 256]
+    numshots = [4, 8, 16, 32, 64, 128, 256, 'all']
     # datasets = ["breastcancer", "breastcancer2", "chemotherapy", "coloncancer", "diabetes", "heart", "respiratory"]
     datasets = ["breastcancer", "breastcancer2", "chemotherapy", "coloncancer", "diabetes", "heart", "respiratory"]
     # parent_models = ['tabpfn', 'tabm']
     parent_models = ['tabpfn', 'tabm']
     # student_models = ['xgboost', 'decision_tree', 'logistic_rule_regression', 'ttnet']
-    student_models = ['logistic_regression', 'decision_tree', 'logistic_rule_regression', 'ttnet']
+    student_models = ['rrl']
 
+    # Parse GPU IDs for multi-GPU support
+    gpu_ids_list = []
     if device.startswith('cuda'):
         if ':' in device:
-            gpu_ids = device.split(':')[1]
-            os.environ['CUDA_VISIBLE_DEVICES'] = gpu_ids
+            gpu_ids_str = device.split(':')[1]
+            os.environ['CUDA_VISIBLE_DEVICES'] = gpu_ids_str
+            # Parse individual GPU IDs for round-robin assignment
+            gpu_ids_list = [int(x.strip()) for x in gpu_ids_str.split(',')]
         else:
             os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-
+            gpu_ids_list = [0]
+    
+    task_idx = 0  # Counter for round-robin GPU assignment
     for dataset_name in datasets:
         for numshot in numshots:
             for parent_model in parent_models:
                 for student_model in student_models:
-                    print(f"Running {student_model} on {dataset_name} with {numshot} shots from {parent_model}")
+                    # For single-GPU models (RRL, TTNet), distribute across available GPUs
+                    gpu_id = None
+                    if student_model in ['rrl', 'ttnet'] and gpu_ids_list:
+                        # Round-robin assignment: use remapped GPU IDs (0, 1, 2, 3...)
+                        gpu_id = task_idx % len(gpu_ids_list)
+                        task_idx += 1
+                    
+                    print(f"Running {student_model} on {dataset_name} with {numshot} shots from {parent_model}" +
+                          (f" on GPU {gpu_id}" if gpu_id is not None else ""))
                     try:
-                        main(dataset_name, numshot, parent_model, student_model, device=device)
+                        main(dataset_name, numshot, parent_model, student_model, device=device, gpu_id=gpu_id)
                     except Exception as e:
                         print(f"ERROR during {student_model} on {dataset_name}: {e}")
                         import traceback

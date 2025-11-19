@@ -40,6 +40,12 @@ def get_few_shot_from_csv(dataset_name, num_shot, seed):
     X_test = X.iloc[remaining_idx].reset_index(drop=True)
     y_test = y.iloc[remaining_idx].reset_index(drop=True)
 
+    # Handle 'all' shot setting - use entire training set
+    if num_shot == 'all' or (isinstance(num_shot, str) and num_shot.lower() == 'all'):
+        X_few = X_train.copy()
+        y_few = y_train.copy()
+        return X_few, y_few, X_train, y_train, X_test, y_test
+
     if num_shot > len(train_idx):
         raise ValueError("num_shot cannot exceed the size of the balanced training set (256).")
     if num_shot % 2 != 0:

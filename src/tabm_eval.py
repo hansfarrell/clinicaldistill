@@ -26,22 +26,25 @@ from baselines.utils_baselines import set_seed
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, required=True)
-    parser.add_argument("--numshot", type=int, required=True)
+    parser.add_argument("--numshot", type=str, required=True)  # Changed to str to handle 'all'
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", type=str, default="cuda")
     args = parser.parse_args()
 
+    # Convert numshot to int if it's not 'all'
+    numshot = args.numshot if args.numshot.lower() == 'all' else int(args.numshot)
+    
     set_seed(args.seed)
 
     # Output directory
-    save_dir = f"eval_res/tabm/{args.dataset}/{args.numshot}_shot/"
+    save_dir = f"eval_res/tabm/{args.dataset}/{numshot}_shot/"
     results_path = os.path.join(save_dir, "eval_metrics.json")
     if os.path.exists(results_path):
         print(f"Output already exists at {save_dir}. Skipping run.")
         return
 
     # Load Data
-    X_few, y_few, X_train, y_train, X_test, y_test = get_few_shot_from_csv(args.dataset, args.numshot, args.seed)
+    X_few, y_few, X_train, y_train, X_test, y_test = get_few_shot_from_csv(args.dataset, numshot, args.seed)
     
     synth_path = f"dataset/{args.dataset}/{args.dataset}_synthetic.csv"
     synth_df = pd.read_csv(synth_path)
