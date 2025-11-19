@@ -1,6 +1,4 @@
-# Towards Globally Interpretable Few-Shot Tabular Learning: Distilling Foundation Models
-
-This repository contains the implementation for the paper **Towards Globally Interpretable Few-Shot Tabular Learning: Distilling Foundation Models** submitted to the AAAI 2026 Workshop.
+This repository contains the implementation for the paper **Leveraging Foundation Models in Healthcare: A Distillation Approach to Interpretable Clinical Prediction** submitted to the AAAI 2026 Workshop.
 
 All the experimental results can be found in `baseline_results.csv` and `distillation_results.csv`.
 
