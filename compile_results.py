@@ -632,10 +632,10 @@ def generate_latex_tables(baseline_csv='baseline_results.csv',
     latex_output.append("\\caption{Mean complexity of student models across different shot configurations.}")
     latex_output.append("\\label{tab:complexity}")
     latex_output.append("\\setlength{\\tabcolsep}{2pt}")
-    latex_output.append("\\begin{tabular}{llccccccc}")
+    latex_output.append("\\begin{tabular}{llcccccccc}")
     latex_output.append("\\toprule")
-    latex_output.append("Dataset & Student & \\multicolumn{7}{c}{Shots} \\\\")
-    latex_output.append("& & 4 & 8 & 16 & 32 & 64 & 128 & 256 \\\\")
+    latex_output.append("Dataset & Student & \\multicolumn{8}{c}{Shots} \\\\")
+    latex_output.append("& & 4 & 8 & 16 & 32 & 64 & 128 & 256 & all \\\\")
     latex_output.append("\\midrule")
     
     for dataset in datasets:
@@ -700,14 +700,14 @@ def generate_latex_tables(baseline_csv='baseline_results.csv',
             # Build the row
             if idx == 0:
                 # First row for this dataset - include dataset name with multirow
-                latex_output.append(f"\\multirow{{{len(student_models)}}}{{*}}{{{dataset_display}}} & {model_display} & {complexity_strs[0]} & {complexity_strs[1]} & {complexity_strs[2]} & {complexity_strs[3]} & {complexity_strs[4]} & {complexity_strs[5]} & {complexity_strs[6]} \\\\")
+                latex_output.append(f"\\multirow{{{len(student_models)}}}{{*}}{{{dataset_display}}} & {model_display} & {complexity_strs[0]} & {complexity_strs[1]} & {complexity_strs[2]} & {complexity_strs[3]} & {complexity_strs[4]} & {complexity_strs[5]} & {complexity_strs[6]} & {complexity_strs[7]} \\\\")
             else:
                 # Subsequent rows - no dataset name
-                latex_output.append(f"& {model_display} & {complexity_strs[0]} & {complexity_strs[1]} & {complexity_strs[2]} & {complexity_strs[3]} & {complexity_strs[4]} & {complexity_strs[5]} & {complexity_strs[6]} \\\\")
+                latex_output.append(f"& {model_display} & {complexity_strs[0]} & {complexity_strs[1]} & {complexity_strs[2]} & {complexity_strs[3]} & {complexity_strs[4]} & {complexity_strs[5]} & {complexity_strs[6]} & {complexity_strs[7]} \\\\")
         
         # Add a line between datasets (except after the last one)
         if dataset != datasets[-1]:
-            latex_output.append("\\cmidrule(lr){1-9}")
+            latex_output.append("\\cmidrule(lr){1-10}")
     
     latex_output.append("\\bottomrule")
     latex_output.append("\\end{tabular}")

@@ -45,10 +45,15 @@ def load_parent_model_metrics(parent_model, base_dir='eval_res'):
                 if auc_value is None:
                     continue
 
+                numshot_str = shot_dir.name.replace('_shot', '')
                 try:
-                    numshot = int(shot_dir.name.replace('_shot', ''))
+                    numshot = int(numshot_str)
                 except ValueError:
-                    continue
+                    # Handle 'all' shot setting
+                    if numshot_str == 'all':
+                        numshot = 'all'
+                    else:
+                        continue
 
                 metrics.append({
                     'dataset': dataset_dir.name,
@@ -146,11 +151,15 @@ def create_parent_model_plots(merged_df, parent_model, output_dir, parent_metric
     # 2. Shot setting analysis
     plt.subplot(1, 3, 2)
     if parent_model.lower() == 'carte':
-        shot_values = [8, 16, 32, 64, 128, 256]
-        xtick_values = [8, 32, 128]
+        shot_values = [8, 16, 32, 64, 128, 256, 'all']
+        shot_numeric = [8, 16, 32, 64, 128, 256, 512]  # 'all' mapped to 512 for plotting
+        xtick_values = [8, 32, 128, 512]
+        xtick_labels = ['8', '32', '128', 'all']
     else:
-        shot_values = [4, 8, 16, 32, 64, 128, 256]
-        xtick_values = [4, 16, 64, 256]
+        shot_values = [4, 8, 16, 32, 64, 128, 256, 'all']
+        shot_numeric = [4, 8, 16, 32, 64, 128, 256, 512]  # 'all' mapped to 512 for plotting
+        xtick_values = [4, 16, 64, 256, 512]
+        xtick_labels = ['4', '16', '64', '256', 'all']
     
     # Define student model order alphabetically
     student_model_order = ['decision_tree', 'log. reg.', 'log. rule regr.', 'ttnet', 'xgboost']
@@ -168,7 +177,9 @@ def create_parent_model_plots(merged_df, parent_model, output_dir, parent_metric
             baseline_y = []
             for _, row in baseline_shot.iterrows():
                 if row['numshot'] in shot_values:
-                    baseline_x.append(row['numshot'])
+                    # Map shot value to numeric position
+                    idx = shot_values.index(row['numshot'])
+                    baseline_x.append(shot_numeric[idx])
                     baseline_y.append(row['mean_auc'])
             if baseline_x:
                 plt.plot(baseline_x, baseline_y, 
@@ -181,7 +192,9 @@ def create_parent_model_plots(merged_df, parent_model, output_dir, parent_metric
             distill_y = []
             for _, row in distill_shot.iterrows():
                 if row['numshot'] in shot_values:
-                    distill_x.append(row['numshot'])
+                    # Map shot value to numeric position
+                    idx = shot_values.index(row['numshot'])
+                    distill_x.append(shot_numeric[idx])
                     distill_y.append(row['mean_auc'])
             if distill_x:
                 plt.plot(distill_x, distill_y, 
@@ -199,13 +212,13 @@ def create_parent_model_plots(merged_df, parent_model, output_dir, parent_metric
     
     plt.legend(handles=legend_elements, loc='best', fontsize=14)
     # Set minor ticks for all shot values but only label the specified ones
-    plt.gca().set_xticks(shot_values, minor=True)
+    plt.gca().set_xticks(shot_numeric, minor=True)
     plt.gca().set_xticks(xtick_values, minor=False)
     plt.gca().tick_params(axis='x', which='minor', length=8, width=2)
     plt.gca().tick_params(axis='x', which='major', length=4, width=1)
-    plt.xticks(xtick_values, fontsize=16)
+    plt.xticks(xtick_values, xtick_labels, fontsize=16)
     plt.yticks(fontsize=16)
-    plt.xlim(min(shot_values) * 0.8, max(shot_values) * 1.1)
+    plt.xlim(min(shot_numeric) * 0.8, max(shot_numeric) * 1.1)
     plt.xlabel('Number of Shots', fontsize=16)
     plt.ylabel('Mean AUC', fontsize=16)
     plt.grid(True, alpha=0.3)
@@ -223,7 +236,9 @@ def create_parent_model_plots(merged_df, parent_model, output_dir, parent_metric
     baseline_y = []
     for _, row in baseline_shot.iterrows():
         if row['numshot'] in shot_values:
-            baseline_x.append(row['numshot'])
+            # Map shot value to numeric position
+            idx = shot_values.index(row['numshot'])
+            baseline_x.append(shot_numeric[idx])
             baseline_y.append(row['mean_auc'])
     if baseline_x:
         baseline_y = np.array(baseline_y)
@@ -236,7 +251,9 @@ def create_parent_model_plots(merged_df, parent_model, output_dir, parent_metric
     distill_y = []
     for _, row in distill_shot.iterrows():
         if row['numshot'] in shot_values:
-            distill_x.append(row['numshot'])
+            # Map shot value to numeric position
+            idx = shot_values.index(row['numshot'])
+            distill_x.append(shot_numeric[idx])
             distill_y.append(row['mean_auc'])
     if distill_x:
         distill_y = np.array(distill_y)
@@ -251,7 +268,9 @@ def create_parent_model_plots(merged_df, parent_model, output_dir, parent_metric
         parent_y = []
         for _, row in parent_shot.iterrows():
             if row['numshot'] in shot_values:
-                parent_x.append(row['numshot'])
+                # Map shot value to numeric position
+                idx = shot_values.index(row['numshot'])
+                parent_x.append(shot_numeric[idx])
                 parent_y.append(row['parent_auc'])
         if parent_x:
             parent_y = np.array(parent_y)
@@ -259,13 +278,13 @@ def create_parent_model_plots(merged_df, parent_model, output_dir, parent_metric
                      color='green', linestyle='-.', marker='^', alpha=0.8,
                      label=f'{display_name} (teacher)', linewidth=3, markersize=8)
     # Set minor ticks for all shot values but only label the specified ones
-    plt.gca().set_xticks(shot_values, minor=True)
+    plt.gca().set_xticks(shot_numeric, minor=True)
     plt.gca().set_xticks(xtick_values, minor=False)
     plt.gca().tick_params(axis='x', which='minor', length=8, width=2)
     plt.gca().tick_params(axis='x', which='major', length=4, width=1)
-    plt.xticks(xtick_values, fontsize=16)
+    plt.xticks(xtick_values, xtick_labels, fontsize=16)
     plt.yticks(fontsize=16)
-    plt.xlim(min(shot_values) * 0.8, max(shot_values) * 1.1)
+    plt.xlim(min(shot_numeric) * 0.8, max(shot_numeric) * 1.1)
     plt.xlabel('Number of Shots', fontsize=16)
     plt.ylabel('Mean AUC (averaged across all models)', fontsize=16)
     plt.legend(fontsize=14)
