@@ -731,7 +731,11 @@ if __name__ == "__main__":
         print(df.head())
         print(f"\nUnique parent models: {df['parent_model'].unique()}")
         print(f"Unique datasets: {df['dataset'].unique()}")
-        print(f"Unique shot counts: {sorted(df['numshot'].unique())}")
+        # Sort numshot with 'all' at the end
+        numshots = df['numshot'].unique()
+        numshot_ints = sorted([x for x in numshots if isinstance(x, int)])
+        numshot_strs = [x for x in numshots if isinstance(x, str)]  # Just 'all'
+        print(f"Unique shot counts: {numshot_ints + numshot_strs}")
         print(f"Unique student models: {df['student_model'].unique()}")
     
     # Compile baseline results
@@ -743,7 +747,11 @@ if __name__ == "__main__":
         print("\nSample of baseline results:")
         print(baseline_df.head())
         print(f"\nUnique datasets: {baseline_df['dataset'].unique()}")
-        print(f"Unique shot counts: {sorted(baseline_df['numshot'].unique())}")
+        # Sort numshot with 'all' at the end
+        numshots = baseline_df['numshot'].unique()
+        numshot_ints = sorted([x for x in numshots if isinstance(x, int)])
+        numshot_strs = [x for x in numshots if isinstance(x, str)]  # Just 'all'
+        print(f"Unique shot counts: {numshot_ints + numshot_strs}")
         print(f"Unique baseline models: {baseline_df['baseline_model'].unique()}")
     
     # Perform Wilcoxon test
