@@ -1,0 +1,6 @@
+{
+  "dataset": "coloncancer",
+  "numshot": "all",
+  "seed": 0,
+  "device": "cuda"
+}

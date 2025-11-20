@@ -1,0 +1,6 @@
+{
+  "dataset": "diabetes",
+  "numshot": "all",
+  "seed": 0,
+  "device": "cuda"
+}

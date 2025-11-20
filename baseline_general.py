@@ -19,8 +19,7 @@ from aix360.algorithms.rbm import FeatureBinarizer, LogisticRuleRegression
 
 from src.utils.helper import get_few_shot_from_csv
 from baselines.utils_baselines import set_seed
-from src.ttnet.ttnet_wrapper import TTnetStudentModel, TTNetPreprocessor 
-from rrl.utils import RRLWrapper
+from src.ttnet.ttnet_wrapper import TTnetStudentModel, TTNetPreprocessor
 
 SEEDS = [0, 1, 6, 7, 8]
 
@@ -30,7 +29,7 @@ def main(dataset_name, numshot, baseline_model_name, device='cpu', gpu_id=None):
     print(f"Starting {baseline_model_name} on {dataset_name}, {numshot_str}-shot baseline")
     info_path = f"dataset/{dataset_name}/{dataset_name}.info"
     
-    # If gpu_id is provided, use it for single-GPU models (RRL, TTNet)
+    # If gpu_id is provided, use it for single-GPU models (TTNet)
     if gpu_id is not None and device.startswith('cuda'):
         device_for_model = f'cuda:{gpu_id}'
     else:
@@ -101,14 +100,11 @@ def main(dataset_name, numshot, baseline_model_name, device='cpu', gpu_id=None):
         elif baseline_model_name == 'ttnet':
             features_size = X_few_proc.shape[1]
             model = TTnetStudentModel(features_size=features_size, index=few_index, device=device_for_model)
-        elif baseline_model_name == 'rrl':
-            features_size = X_few_proc.shape[1]
-            model = RRLWrapper(features_size=features_size, index=few_index, device=device_for_model)
 
         # Fit the model
         if baseline_model_name not in ['logistic_rule_regression']: # LRR is already fitted
             if param_dist is not None:
-                search = RandomizedSearchCV(model, param_distributions=param_dist, n_iter=50, cv=2, random_state=seed)
+                search = RandomizedSearchCV(model, param_distributions=param_dist, n_iter=30, cv=2, random_state=seed)
                 search.fit(X_few_proc, y_few)
                 model = search.best_estimator_
             else:
@@ -120,10 +116,6 @@ def main(dataset_name, numshot, baseline_model_name, device='cpu', gpu_id=None):
             y_pred = (y_pred_proba >= 0.5).astype(int)
         elif baseline_model_name == 'ttnet':
             # TTNet returns 1D array of probabilities
-            y_pred_proba = model.predict_proba(X_test_proc)
-            y_pred = (y_pred_proba >= 0.5).astype(int)
-        elif baseline_model_name == 'rrl':
-            # RRL also returns 1D array of probabilities
             y_pred_proba = model.predict_proba(X_test_proc)
             y_pred = (y_pred_proba >= 0.5).astype(int)
         else:
@@ -158,12 +150,6 @@ def main(dataset_name, numshot, baseline_model_name, device='cpu', gpu_id=None):
             condition = np.sum([x.count("AND") for x in explanation["rule"].to_numpy().tolist() if isinstance(x, str)]) + Rule
             complexity = Rule + condition
         elif baseline_model_name == 'ttnet':
-            rule_info = model.extract_rules() 
-            if rule_info is not None and 'complexity' in rule_info:
-                complexity = rule_info['complexity']
-            else:
-                complexity = None
-        elif baseline_model_name == 'rrl':
             rule_info = model.extract_rules() 
             if rule_info is not None and 'complexity' in rule_info:
                 complexity = rule_info['complexity']
@@ -209,11 +195,11 @@ def main(dataset_name, numshot, baseline_model_name, device='cpu', gpu_id=None):
 
 if __name__ == '__main__':
     device = 'cuda:0,1,2,3'  # 'cpu', 'cuda:0', 'cuda:0,1,2,3' for multi-GPU
-    # numshots = [4, 8, 16, 32, 64, 128, 256]
-    numshots = [4, 8, 16, 32, 64, 128, 256, 'all']
+    # numshots = [4, 8, 16, 32, 64, 128, 256, 'all']
+    numshots = ['all']
     datasets = ["breastcancer", "breastcancer2", "chemotherapy", "coloncancer", "diabetes", "heart", "respiratory"]
     # baseline_models = ['xgboost', 'decision_tree', 'logistic_rule_regression', 'ttnet']
-    baseline_models = ['rrl']
+    baseline_models = ['xgboost', 'decision_tree', 'logistic_rule_regression', 'ttnet']
 
     # Parse GPU IDs for multi-GPU support
     gpu_ids_list = []
@@ -232,7 +218,7 @@ if __name__ == '__main__':
         for numshot in numshots:
             for baseline_model in baseline_models:
                 gpu_id = None
-                if baseline_model in ['rrl', 'ttnet'] and gpu_ids_list:
+                if baseline_model in ['ttnet'] and gpu_ids_list:
                     gpu_id = task_idx % len(gpu_ids_list)
                     task_idx += 1
                 
@@ -245,5 +231,3 @@ if __name__ == '__main__':
                     import traceback
                     traceback.print_exc()
     print("All baseline experiments finished.")
-
-# find /hdd/hans/aaai2026/eval_res/baselines/ -type d -name "rrl" -exec rm -rf {} +

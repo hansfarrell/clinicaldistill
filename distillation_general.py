@@ -19,8 +19,7 @@ from aix360.algorithms.rbm import FeatureBinarizer, LogisticRuleRegression
 
 from src.utils.helper import get_few_shot_from_csv
 from baselines.utils_baselines import set_seed
-from src.ttnet.ttnet_wrapper import TTnetStudentModel, TTNetPreprocessor 
-from rrl.utils import RRLWrapper
+from src.ttnet.ttnet_wrapper import TTnetStudentModel, TTNetPreprocessor
 
 SEEDS = [0, 1, 6, 7, 8]
 
@@ -30,7 +29,7 @@ def main(dataset_name, numshot, parent_model, student_model_name, device='cpu', 
     print(f"Starting {student_model_name} on {dataset_name}, {numshot_str}-shot, parent: {parent_model}")
     info_path = f"dataset/{dataset_name}/{dataset_name}.info"
     
-    # If gpu_id is provided, use it for single-GPU models (RRL, TTNet)
+    # If gpu_id is provided, use it for single-GPU models (TTNet)
     if gpu_id is not None and device.startswith('cuda'):
         device_for_model = f'cuda:{gpu_id}'
     else:
@@ -132,11 +131,8 @@ def main(dataset_name, numshot, parent_model, student_model_name, device='cpu', 
         elif student_model_name == 'ttnet':
             features_size = X_synth_proc.shape[1]
             model = TTnetStudentModel(features_size=features_size, index=synth_index, device=device_for_model)
-        elif student_model_name == 'rrl':
-            features_size = X_synth_proc.shape[1]
-            model = RRLWrapper(features_size=features_size, index=synth_index, device=device_for_model)
 
-        # Fit the model
+        # Fit the student model with predictions from parent model
         if student_model_name not in ['logistic_rule_regression']: # LRR is already fitted
             if param_dist is not None:
                 search = RandomizedSearchCV(model, param_distributions=param_dist, n_iter=50, cv=2, random_state=seed)
@@ -151,10 +147,6 @@ def main(dataset_name, numshot, parent_model, student_model_name, device='cpu', 
             y_pred = (y_pred_proba >= 0.5).astype(int)
         elif student_model_name == 'ttnet':
             # TTNet returns 1D array of probabilities
-            y_pred_proba = model.predict_proba(X_test_proc)
-            y_pred = (y_pred_proba >= 0.5).astype(int)
-        elif student_model_name == 'rrl':
-            # RRL also returns 1D array of probabilities
             y_pred_proba = model.predict_proba(X_test_proc)
             y_pred = (y_pred_proba >= 0.5).astype(int)
         else:
@@ -189,12 +181,6 @@ def main(dataset_name, numshot, parent_model, student_model_name, device='cpu', 
             condition = np.sum([x.count("AND") for x in explanation["rule"].to_numpy().tolist() if isinstance(x, str)]) + Rule
             complexity = Rule + condition
         elif student_model_name == 'ttnet':
-            rule_info = model.extract_rules() 
-            if rule_info is not None and 'complexity' in rule_info:
-                complexity = rule_info['complexity']
-            else:
-                complexity = None
-        elif student_model_name == 'rrl':
             rule_info = model.extract_rules() 
             if rule_info is not None and 'complexity' in rule_info:
                 complexity = rule_info['complexity']
@@ -240,14 +226,14 @@ def main(dataset_name, numshot, parent_model, student_model_name, device='cpu', 
 
 if __name__ == '__main__':
     device = 'cuda:0,1,2,3'  # 'cpu', 'cuda:0', 'cuda:0,1,2,3' for multi-GPU
-    # numshots = [4, 8, 16, 32, 64, 128, 256]
-    numshots = [4, 8, 16, 32, 64, 128, 256, 'all']
+    # numshots = [4, 8, 16, 32, 64, 128, 256, 'all']
+    numshots = ['all']
     # datasets = ["breastcancer", "breastcancer2", "chemotherapy", "coloncancer", "diabetes", "heart", "respiratory"]
     datasets = ["breastcancer", "breastcancer2", "chemotherapy", "coloncancer", "diabetes", "heart", "respiratory"]
     # parent_models = ['tabpfn', 'tabm']
     parent_models = ['tabpfn', 'tabm']
     # student_models = ['xgboost', 'decision_tree', 'logistic_rule_regression', 'ttnet']
-    student_models = ['rrl']
+    student_models = ['xgboost', 'decision_tree', 'logistic_rule_regression', 'ttnet']
 
     # Parse GPU IDs for multi-GPU support
     gpu_ids_list = []
@@ -266,9 +252,9 @@ if __name__ == '__main__':
         for numshot in numshots:
             for parent_model in parent_models:
                 for student_model in student_models:
-                    # For single-GPU models (RRL, TTNet), distribute across available GPUs
+                    # For single-GPU models (TTNet), distribute across available GPUs
                     gpu_id = None
-                    if student_model in ['rrl', 'ttnet'] and gpu_ids_list:
+                    if student_model in ['ttnet'] and gpu_ids_list:
                         # Round-robin assignment: use remapped GPU IDs (0, 1, 2, 3...)
                         gpu_id = task_idx % len(gpu_ids_list)
                         task_idx += 1

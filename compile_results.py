@@ -71,7 +71,7 @@ def compile_distillation_results(base_dir="eval_res", output_csv="distillation_r
                             result = {
                                 'parent_model': parent_model,
                                 'dataset': dataset,
-                                'numshot': int(numshot),
+                                'numshot': int(numshot) if numshot.isdigit() else numshot,
                                 'student_model': student_model,
                                 'mean_auc': mean_auc,
                                 'std_auc': std_auc,
@@ -177,7 +177,7 @@ def compile_baseline_results(base_dir="eval_res/baselines", output_csv="baseline
                         # Store the result
                         result = {
                             'dataset': dataset,
-                            'numshot': int(numshot),
+                            'numshot': int(numshot) if numshot.isdigit() else numshot,
                             'baseline_model': baseline_model,
                             'mean_auc': mean_auc,
                             'std_auc': std_auc,
@@ -223,7 +223,8 @@ def extract_individual_aucs_from_files(base_dir="eval_res"):
             for shot_config in os.listdir(dataset_path):
                 if not shot_config.endswith('_shot') or not os.path.isdir(os.path.join(dataset_path, shot_config)):
                     continue
-                numshot = int(shot_config.replace('_shot', ''))
+                numshot_str = shot_config.replace('_shot', '')
+                numshot = int(numshot_str) if numshot_str.isdigit() else numshot_str
                 shot_path = os.path.join(dataset_path, shot_config)
                 
                 for model in os.listdir(shot_path):
@@ -258,7 +259,8 @@ def extract_individual_aucs_from_files(base_dir="eval_res"):
             for shot_config in os.listdir(dataset_path):
                 if not shot_config.endswith('_shot') or not os.path.isdir(os.path.join(dataset_path, shot_config)):
                     continue
-                numshot = int(shot_config.replace('_shot', ''))
+                numshot_str = shot_config.replace('_shot', '')
+                numshot = int(numshot_str) if numshot_str.isdigit() else numshot_str
                 shot_path = os.path.join(dataset_path, shot_config)
                 
                 for student_model in os.listdir(shot_path):
@@ -392,8 +394,8 @@ def perform_friedman_nemenyi_test(baseline_csv='baseline_results.csv',
         df_long = df_pivot.reset_index()
         df_long['block_id'] = np.arange(len(df_long))
         
-        # Convert numshot to integer to avoid type issues
-        df_long['numshot'] = df_long['numshot'].astype(int)
+        # Handle numshot: keep as-is (can be int or 'all')
+        # No type conversion needed since we're only using block_id for the test
         
         df_melted = df_long.melt(
             id_vars=['block_id'],  # Only use block_id as id_var to avoid type issues
@@ -485,7 +487,7 @@ def generate_latex_tables(baseline_csv='baseline_results.csv',
     }
     
     student_models = ['ttnet', 'xgboost', 'logistic_rule_regression', 'decision_tree']
-    shots = [4, 8, 16, 32, 64, 128, 256]
+    shots = [4, 8, 16, 32, 64, 128, 256, 'all']
     
     latex_output = []
     
