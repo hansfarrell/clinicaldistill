@@ -203,17 +203,18 @@ def compile_baseline_results(base_dir="eval_res/baselines", output_csv="baseline
         return None
 
 
-def extract_individual_aucs_from_files(base_dir="eval_res"):
-    distill_aucs = []
-    baseline_aucs = []
+def extract_individual_aucs_with_metadata(base_dir="eval_res"):
+    """
+    Extract individual AUC values from result files with full metadata.
+    Returns a list of dictionaries with dataset, numshot, student_model, seed, strategy, and auc.
+    """
+    all_rows = []
     
     # Get all parent models (excluding baselines)
     parent_models = [d for d in os.listdir(base_dir) if d != 'baselines' and os.path.isdir(os.path.join(base_dir, d))]
     
-    # Process baseline results first to get all configurations
+    # Process baseline results first
     baseline_dir = os.path.join(base_dir, 'baselines')
-    baseline_configs = {}  # key: (dataset, numshot, model), value: list of AUCs
-    
     if os.path.exists(baseline_dir):
         for dataset in os.listdir(baseline_dir):
             dataset_path = os.path.join(baseline_dir, dataset)
@@ -242,14 +243,23 @@ def extract_individual_aucs_from_files(base_dir="eval_res"):
                                 if line.startswith('AUCs:'):
                                     auc_str = line.split(':', 1)[1].strip()
                                     aucs = eval(auc_str)
-                                    baseline_configs[(dataset, numshot, model)] = aucs
+                                    for seed_idx, auc in enumerate(aucs):
+                                        all_rows.append({
+                                            'dataset': dataset,
+                                            'numshot': numshot,
+                                            'student_model': model,
+                                            'seed': seed_idx,
+                                            'strategy': 'Baseline',
+                                            'auc': auc
+                                        })
                                     break
                         except Exception as e:
                             print(f"Error processing baseline {results_file}: {e}")
     
-    # Now process distillation results and match with baselines
+    # Now process distillation results
     for parent_model in parent_models:
         parent_path = os.path.join(base_dir, parent_model)
+        strategy_name = 'TabPFN' if parent_model == 'tabpfn' else 'TabM'
         
         for dataset in os.listdir(parent_path):
             dataset_path = os.path.join(parent_path, dataset)
@@ -277,21 +287,54 @@ def extract_individual_aucs_from_files(base_dir="eval_res"):
                             for line in content.split('\n'):
                                 if line.startswith('AUCs:'):
                                     auc_str = line.split(':', 1)[1].strip()
-                                    distill_aucs_list = eval(auc_str)
-                                    
-                                    # Try to match with baseline
-                                    baseline_key = (dataset, numshot, student_model)
-                                    if baseline_key in baseline_configs:
-                                        baseline_aucs_list = baseline_configs[baseline_key]
-                                        
-                                        # Match seed by seed
-                                        min_len = min(len(distill_aucs_list), len(baseline_aucs_list))
-                                        for i in range(min_len):
-                                            distill_aucs.append(distill_aucs_list[i])
-                                            baseline_aucs.append(baseline_aucs_list[i])
+                                    aucs = eval(auc_str)
+                                    for seed_idx, auc in enumerate(aucs):
+                                        all_rows.append({
+                                            'dataset': dataset,
+                                            'numshot': numshot,
+                                            'student_model': student_model,
+                                            'seed': seed_idx,
+                                            'strategy': strategy_name,
+                                            'auc': auc
+                                        })
                                     break
                         except Exception as e:
                             print(f"Error processing distillation {results_file}: {e}")
+    
+    return all_rows
+
+
+def extract_individual_aucs_from_files(base_dir="eval_res"):
+    """
+    Extract individual AUC values for Wilcoxon test (paired distillation vs baseline).
+    Returns two lists: distill_aucs and baseline_aucs.
+    """
+    # Get all data with metadata
+    all_rows = extract_individual_aucs_with_metadata(base_dir)
+    
+    # Convert to DataFrame for easier manipulation
+    df = pd.DataFrame(all_rows)
+    
+    # Separate baseline and distillation data
+    baseline_df = df[df['strategy'] == 'Baseline'].copy()
+    distill_df = df[df['strategy'].isin(['TabPFN', 'TabM'])].copy()
+    
+    # Match baseline with distillation results
+    distill_aucs = []
+    baseline_aucs = []
+    
+    for _, distill_row in distill_df.iterrows():
+        # Find matching baseline
+        matching_baseline = baseline_df[
+            (baseline_df['dataset'] == distill_row['dataset']) &
+            (baseline_df['numshot'] == distill_row['numshot']) &
+            (baseline_df['student_model'] == distill_row['student_model']) &
+            (baseline_df['seed'] == distill_row['seed'])
+        ]
+        
+        if len(matching_baseline) > 0:
+            distill_aucs.append(distill_row['auc'])
+            baseline_aucs.append(matching_baseline.iloc[0]['auc'])
     
     return distill_aucs, baseline_aucs
 
@@ -333,37 +376,20 @@ def perform_friedman_nemenyi_test(baseline_csv='baseline_results.csv',
     """
     Perform Friedman test with Nemenyi post-hoc to compare baseline, TabPFN distillation, 
     and TabM distillation across different datasets and shot configurations.
+    Uses individual AUC values from each seed rather than just mean AUCs.
     """
-    # Load data
-    baseline_df = pd.read_csv(baseline_csv)
-    distillation_df = pd.read_csv(distillation_csv)
+    # Extract individual AUCs with metadata
+    all_rows = extract_individual_aucs_with_metadata(base_dir="eval_res")
     
-    # Prepare baseline data
-    base_subset = baseline_df[['dataset', 'numshot', 'baseline_model', 'mean_auc']].copy()
-    base_subset = base_subset.rename(columns={'baseline_model': 'student_model'})
-    base_subset['strategy'] = 'Baseline'
+    # Convert to DataFrame
+    full_df = pd.DataFrame(all_rows)
     
-    # Prepare TabPFN distillation data
-    tabpfn_subset = distillation_df[distillation_df['parent_model'] == 'tabpfn'][
-        ['dataset', 'numshot', 'student_model', 'mean_auc']
-    ].copy()
-    tabpfn_subset['strategy'] = 'TabPFN'
-    
-    # Prepare TabM distillation data
-    tabm_subset = distillation_df[distillation_df['parent_model'] == 'tabm'][
-        ['dataset', 'numshot', 'student_model', 'mean_auc']
-    ].copy()
-    tabm_subset['strategy'] = 'TabM'
-    
-    # Combine all data
-    full_df = pd.concat([base_subset, tabpfn_subset, tabm_subset], ignore_index=True)
-    
-    # Pivot to get matrix: Rows=(dataset, numshot, student_model), Columns=strategy
-    # Each (dataset, numshot, student_model) combination is treated as a "block" for repeated measures
+    # Pivot to get matrix: Rows=(dataset, numshot, student_model, seed), Columns=strategy
+    # Each (dataset, numshot, student_model, seed) combination is treated as a "block" for repeated measures
     df_pivot = full_df.pivot_table(
-        index=['dataset', 'numshot', 'student_model'],
+        index=['dataset', 'numshot', 'student_model', 'seed'],
         columns='strategy',
-        values='mean_auc'
+        values='auc'
     ).dropna()
     
     # Ensure column order is consistent
