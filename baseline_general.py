@@ -8,7 +8,7 @@ from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, roc_auc_
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 import xgboost as xgb
-from sklearn.model_selection import RandomizedSearchCV
+from sklearn.model_selection import RandomizedSearchCV, GridSearchCV
 from scipy.stats import randint, loguniform
 
 # Suppress sklearn FutureWarning about sparse parameter
@@ -95,20 +95,29 @@ def main(dataset_name, numshot, baseline_model_name, device='cpu', gpu_id=None):
             X_few_fb = fb.transform(X_few)
             X_test_fb = fb.transform(X_test)
             
-            model = LogisticRuleRegression(lambda0=0.01, lambda1=0.001)
-            model.fit(X_few_fb, y_few)
+            # Grid search over lambda0 and lambda1 parameters
+            param_grid = {
+                'lambda0': [0.1, 0.05, 0.01],
+                'lambda1': [0.01, 0.005, 0.001]
+            }
+            base_model = LogisticRuleRegression()
+            grid_search = GridSearchCV(base_model, param_grid=param_grid, cv=2)
+            grid_search.fit(X_few_fb, y_few)
+            model = grid_search.best_estimator_
         elif baseline_model_name == 'ttnet':
             features_size = X_few_proc.shape[1]
             model = TTnetStudentModel(features_size=features_size, index=few_index, device=device_for_model)
 
         # Fit the model
-        if baseline_model_name not in ['logistic_rule_regression']: # LRR is already fitted
-            if param_dist is not None:
-                search = RandomizedSearchCV(model, param_distributions=param_dist, n_iter=30, cv=2, random_state=seed)
-                search.fit(X_few_proc, y_few)
-                model = search.best_estimator_
-            else:
-                model.fit(X_few_proc, y_few)
+        if baseline_model_name == 'logistic_rule_regression':
+            # LRR is already fitted with grid search above
+            pass
+        elif param_dist is not None:
+            search = RandomizedSearchCV(model, param_distributions=param_dist, n_iter=30, cv=2, random_state=seed)
+            search.fit(X_few_proc, y_few)
+            model = search.best_estimator_
+        else:
+            model.fit(X_few_proc, y_few)
 
         # Evaluate on test set
         if baseline_model_name == 'logistic_rule_regression':
@@ -196,10 +205,10 @@ def main(dataset_name, numshot, baseline_model_name, device='cpu', gpu_id=None):
 if __name__ == '__main__':
     device = 'cuda:0,1,2,3'  # 'cpu', 'cuda:0', 'cuda:0,1,2,3' for multi-GPU
     # numshots = [4, 8, 16, 32, 64, 128, 256, 'all']
-    numshots = ['all']
+    numshots = [4, 8, 16, 32, 64, 128, 256, 'all']
     datasets = ["breastcancer", "breastcancer2", "chemotherapy", "coloncancer", "diabetes", "heart", "respiratory"]
     # baseline_models = ['xgboost', 'decision_tree', 'logistic_rule_regression', 'ttnet']
-    baseline_models = ['xgboost', 'decision_tree', 'logistic_rule_regression', 'ttnet']
+    baseline_models = ['logistic_rule_regression']
 
     # Parse GPU IDs for multi-GPU support
     gpu_ids_list = []
@@ -231,3 +240,5 @@ if __name__ == '__main__':
                     import traceback
                     traceback.print_exc()
     print("All baseline experiments finished.")
+
+# find eval_res -type d -name "logistic_rule_regression" -exec rm -rf {} +

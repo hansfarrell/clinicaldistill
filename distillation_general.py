@@ -8,7 +8,7 @@ from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, roc_auc_
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 import xgboost as xgb
-from sklearn.model_selection import RandomizedSearchCV
+from sklearn.model_selection import RandomizedSearchCV, GridSearchCV
 from scipy.stats import randint, loguniform
 
 # Suppress sklearn FutureWarning about sparse parameter
@@ -126,20 +126,28 @@ def main(dataset_name, numshot, parent_model, student_model_name, device='cpu', 
                     X_synth_df[col] = pd.to_numeric(X_synth_df[col], errors='coerce')
             X_synth_fb = fb.transform(X_synth_df)
             X_test_fb = fb.transform(X_test)  # X_test is already a DataFrame
-            model = LogisticRuleRegression(lambda0=0.01, lambda1=0.001)
-            model.fit(X_synth_fb, y_synth)
+            
+            # Grid search over lambda0 and lambda1 parameters
+            param_grid = {
+                'lambda0': [0.1, 0.05, 0.01],
+                'lambda1': [0.01, 0.005, 0.001]
+            }
+            base_model = LogisticRuleRegression()
+            grid_search = GridSearchCV(base_model, param_grid=param_grid, cv=2)
+            grid_search.fit(X_synth_fb, y_synth)
+            model = grid_search.best_estimator_
         elif student_model_name == 'ttnet':
             features_size = X_synth_proc.shape[1]
             model = TTnetStudentModel(features_size=features_size, index=synth_index, device=device_for_model)
 
-        # Fit the student model with predictions from parent model
-        if student_model_name not in ['logistic_rule_regression']: # LRR is already fitted
-            if param_dist is not None:
-                search = RandomizedSearchCV(model, param_distributions=param_dist, n_iter=50, cv=2, random_state=seed)
-                search.fit(X_synth_proc, y_synth)
-                model = search.best_estimator_
-            else:
-                model.fit(X_synth_proc, y_synth)
+        if student_model_name == 'logistic_rule_regression':
+            pass
+        elif param_dist is not None:
+            search = RandomizedSearchCV(model, param_distributions=param_dist, n_iter=50, cv=2, random_state=seed)
+            search.fit(X_synth_proc, y_synth)
+            model = search.best_estimator_
+        else:
+            model.fit(X_synth_proc, y_synth)
 
         # Evaluate on test set
         if student_model_name == 'logistic_rule_regression':
