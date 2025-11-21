@@ -376,7 +376,6 @@ def perform_friedman_nemenyi_test(baseline_csv='baseline_results.csv',
     """
     Perform Friedman test with Nemenyi post-hoc to compare baseline, TabPFN distillation, 
     and TabM distillation across different datasets and shot configurations.
-    Uses individual AUC values from each seed rather than just mean AUCs.
     """
     # Extract individual AUCs with metadata
     all_rows = extract_individual_aucs_with_metadata(base_dir="eval_res")
@@ -447,7 +446,11 @@ def perform_friedman_nemenyi_test(baseline_csv='baseline_results.csv',
         )
         
         output_lines.append("\nPairwise p-values:")
-        output_lines.append(nemenyi_results.to_string())
+        # Format p-values in scientific notation for better readability
+        formatted_results = nemenyi_results.copy()
+        for col in formatted_results.columns:
+            formatted_results[col] = formatted_results[col].apply(lambda x: f"{x:.6e}")
+        output_lines.append(formatted_results.to_string())
         output_lines.append("")
         
         # Calculate and display average ranks
@@ -465,9 +468,9 @@ def perform_friedman_nemenyi_test(baseline_csv='baseline_results.csv',
                 if i < j:
                     p_val = nemenyi_results.loc[strat1, strat2]
                     if p_val < 0.05:
-                        output_lines.append(f"  {strat1} vs {strat2}: Significant difference (p={p_val:.4f})")
+                        output_lines.append(f"  {strat1} vs {strat2}: Significant difference (p={p_val})")
                     else:
-                        output_lines.append(f"  {strat1} vs {strat2}: No significant difference (p={p_val:.4f})")
+                        output_lines.append(f"  {strat1} vs {strat2}: No significant difference (p={p_val})")
         
     else:
         output_lines.append("Conclusion: Failed to reject null hypothesis - no significant differences found between strategies.")

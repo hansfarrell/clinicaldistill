@@ -11,10 +11,10 @@ Nemenyi Post-Hoc Test Results:
 ------------------------------------------------------------
 
 Pairwise p-values:
-          Baseline  TabPFN      TabM
-Baseline  1.000000     0.0  0.061813
-TabPFN    0.000000     1.0  0.000000
-TabM      0.061813     0.0  1.000000
+              Baseline        TabPFN          TabM
+Baseline  1.000000e+00  0.000000e+00  6.181261e-02
+TabPFN    0.000000e+00  1.000000e+00  0.000000e+00
+TabM      6.181261e-02  0.000000e+00  1.000000e+00
 
 
 Average Ranks (lower is better):
@@ -23,6 +23,6 @@ Average Ranks (lower is better):
   TabM: 2.187
 
 Pairwise Comparison Interpretations (level=0.05):
-  Baseline vs TabPFN: Significant difference (p=0.0000)
-  Baseline vs TabM: No significant difference (p=0.0618)
-  TabPFN vs TabM: Significant difference (p=0.0000)
+  Baseline vs TabPFN: Significant difference (p=0.0)
+  Baseline vs TabM: No significant difference (p=0.06181260583536807)
+  TabPFN vs TabM: Significant difference (p=0.0)
