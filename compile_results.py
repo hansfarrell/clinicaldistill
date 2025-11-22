@@ -493,6 +493,10 @@ def generate_latex_tables(baseline_csv='baseline_results.csv',
     baseline_df = pd.read_csv(baseline_csv)
     distillation_df = pd.read_csv(distillation_csv)
     
+    # Convert numshot to string for consistent comparison
+    baseline_df['numshot'] = baseline_df['numshot'].astype(str)
+    distillation_df['numshot'] = distillation_df['numshot'].astype(str)
+    
     # Get unique datasets
     datasets = sorted(distillation_df['dataset'].unique())
     
@@ -516,16 +520,20 @@ def generate_latex_tables(baseline_csv='baseline_results.csv',
     }
     
     student_models = ['ttnet', 'xgboost', 'logistic_rule_regression', 'decision_tree']
-    shots = [4, 8, 16, 32, 64, 128, 256, 'all']
+    # For AUC tables, only show selected shots
+    auc_shots = ['4', '32', '256', 'all']
+    # For complexity table, show all shots
+    all_shots = ['4', '8', '16', '32', '64', '128', '256', 'all']
     
     latex_output = []
     
-    for k in shots:
-        latex_output.append(f"% Table for k={k} shots")
+    for k in auc_shots:
+        k_display = k if k == 'all' else k
+        latex_output.append(f"% Table for k={k_display} shots")
         latex_output.append("\\begin{table}")
         latex_output.append("\\centering")
-        latex_output.append(f"\\caption{{Results for $k={k}$ shots. Mean AUC with standard deviation shown as superscript.}}")
-        latex_output.append(f"\\label{{tab:results_k{k}}}")
+        latex_output.append(f"\\caption{{Results for $k={k_display}$ shots. Mean AUC with standard deviation shown as superscript.}}")
+        latex_output.append(f"\\label{{tab:results_k{k_display}}}")
         latex_output.append("\\setlength{\\tabcolsep}{3pt}")
         latex_output.append("\\begin{tabular}{llccc}")
         latex_output.append("\\toprule")
@@ -660,7 +668,7 @@ def generate_latex_tables(baseline_csv='baseline_results.csv',
     latex_output.append("\\centering")
     latex_output.append("\\caption{Mean complexity of student models across different shot configurations.}")
     latex_output.append("\\label{tab:complexity}")
-    latex_output.append("\\setlength{\\tabcolsep}{2pt}")
+    latex_output.append("\\setlength{\\tabcolsep}{1.5pt}")
     latex_output.append("\\begin{tabular}{llcccccccc}")
     latex_output.append("\\toprule")
     latex_output.append("Dataset & Student & \\multicolumn{8}{c}{Shots} \\\\")
@@ -676,7 +684,7 @@ def generate_latex_tables(baseline_csv='baseline_results.csv',
             # Get complexity for each shot size, averaging over baseline, tabpfn, and tabm
             complexities = {}
             complexity_stds = {}
-            for k in shots:
+            for k in all_shots:
                 complexity_values = []
                 
                 # Get baseline complexity
@@ -718,7 +726,7 @@ def generate_latex_tables(baseline_csv='baseline_results.csv',
             
             # Format complexity strings
             complexity_strs = []
-            for k in shots:
+            for k in all_shots:
                 if complexities[k] is not None:
                     mean_val = complexities[k]
                     # Round to nearest integer
@@ -747,7 +755,7 @@ def generate_latex_tables(baseline_csv='baseline_results.csv',
         f.write('\n'.join(latex_output))
     
     print(f"LaTeX tables saved to: {output_file}")
-    print(f"Generated {len(shots)} tables for k={shots} plus 1 complexity table")
+    print(f"Generated {len(auc_shots)} AUC tables for k={auc_shots} plus 1 complexity table with all shots")
 
 
 if __name__ == "__main__":

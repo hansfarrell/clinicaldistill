@@ -3,9 +3,9 @@ Null hypothesis H_0: distillation AUC <= baseline AUC
 Alternative hypothesis H_1: distillation AUC > baseline AUC
 Test significance level: 0.01
 
-Mean difference between distillation AUC and baseline AUC: 0.028073598206328546
-Test statistic: 2531879.0
-p-value: 1.8950189965267142e-59
+Mean difference between distillation AUC and baseline AUC: 0.03076343283399275
+Test statistic: 2553169.5
+p-value: 4.945758852865972e-65
 N (paired samples): 2730
 
 Conclusion: because p < 0.01, reject the null hypothesis.

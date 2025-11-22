@@ -26,7 +26,6 @@ SEEDS = [0, 1, 6, 7, 8]
 def main(dataset_name, numshot, parent_model, student_model_name, device='cpu', gpu_id=None):
     # Convert numshot to string if it's 'all' for display purposes
     numshot_str = numshot if isinstance(numshot, str) else str(numshot)
-    print(f"Starting {student_model_name} on {dataset_name}, {numshot_str}-shot, parent: {parent_model}")
     info_path = f"dataset/{dataset_name}/{dataset_name}.info"
     
     # If gpu_id is provided, use it for single-GPU models (TTNet)
@@ -128,14 +127,20 @@ def main(dataset_name, numshot, parent_model, student_model_name, device='cpu', 
             X_test_fb = fb.transform(X_test)  # X_test is already a DataFrame
             
             # Grid search over lambda0 and lambda1 parameters
-            param_grid = {
-                'lambda0': [0.1, 0.05, 0.01],
-                'lambda1': [0.01, 0.005, 0.001]
-            }
-            base_model = LogisticRuleRegression()
-            grid_search = GridSearchCV(base_model, param_grid=param_grid, cv=2)
-            grid_search.fit(X_synth_fb, y_synth)
-            model = grid_search.best_estimator_
+            try:
+                param_grid = {
+                    'lambda0': [0.1, 0.05, 0.01],
+                    'lambda1': [0.01, 0.005, 0.001]
+                }
+                base_model = LogisticRuleRegression()
+                grid_search = GridSearchCV(base_model, param_grid=param_grid, cv=2)
+                grid_search.fit(X_synth_fb, y_synth)
+                model = grid_search.best_estimator_
+            except ValueError as e:
+                # If grid search fails (e.g., only one class in CV fold), use default parameters
+                print(f"Grid search failed. Using default parameters lambda0=0.01, lambda1=0.001")
+                model = LogisticRuleRegression(lambda0=0.01, lambda1=0.001)
+                model.fit(X_synth_fb, y_synth)
         elif student_model_name == 'ttnet':
             features_size = X_synth_proc.shape[1]
             model = TTnetStudentModel(features_size=features_size, index=synth_index, device=device_for_model)
@@ -235,13 +240,13 @@ def main(dataset_name, numshot, parent_model, student_model_name, device='cpu', 
 if __name__ == '__main__':
     device = 'cuda:0,1,2,3'  # 'cpu', 'cuda:0', 'cuda:0,1,2,3' for multi-GPU
     # numshots = [4, 8, 16, 32, 64, 128, 256, 'all']
-    numshots = ['all']
+    numshots = [4, 8, 16, 32, 64, 128, 256, 'all']
     # datasets = ["breastcancer", "breastcancer2", "chemotherapy", "coloncancer", "diabetes", "heart", "respiratory"]
     datasets = ["breastcancer", "breastcancer2", "chemotherapy", "coloncancer", "diabetes", "heart", "respiratory"]
     # parent_models = ['tabpfn', 'tabm']
     parent_models = ['tabpfn', 'tabm']
     # student_models = ['xgboost', 'decision_tree', 'logistic_rule_regression', 'ttnet']
-    student_models = ['xgboost', 'decision_tree', 'logistic_rule_regression', 'ttnet']
+    student_models = ['logistic_rule_regression']
 
     # Parse GPU IDs for multi-GPU support
     gpu_ids_list = []

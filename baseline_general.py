@@ -26,7 +26,6 @@ SEEDS = [0, 1, 6, 7, 8]
 def main(dataset_name, numshot, baseline_model_name, device='cpu', gpu_id=None):
     # Convert numshot to string if it's 'all' for display purposes
     numshot_str = numshot if isinstance(numshot, str) else str(numshot)
-    print(f"Starting {baseline_model_name} on {dataset_name}, {numshot_str}-shot baseline")
     info_path = f"dataset/{dataset_name}/{dataset_name}.info"
     
     # If gpu_id is provided, use it for single-GPU models (TTNet)
@@ -96,14 +95,20 @@ def main(dataset_name, numshot, baseline_model_name, device='cpu', gpu_id=None):
             X_test_fb = fb.transform(X_test)
             
             # Grid search over lambda0 and lambda1 parameters
-            param_grid = {
-                'lambda0': [0.1, 0.05, 0.01],
-                'lambda1': [0.01, 0.005, 0.001]
-            }
-            base_model = LogisticRuleRegression()
-            grid_search = GridSearchCV(base_model, param_grid=param_grid, cv=2)
-            grid_search.fit(X_few_fb, y_few)
-            model = grid_search.best_estimator_
+            try:
+                param_grid = {
+                    'lambda0': [0.1, 0.05, 0.01],
+                    'lambda1': [0.01, 0.005, 0.001]
+                }
+                base_model = LogisticRuleRegression()
+                grid_search = GridSearchCV(base_model, param_grid=param_grid, cv=2)
+                grid_search.fit(X_few_fb, y_few)
+                model = grid_search.best_estimator_
+            except ValueError as e:
+                # If grid search fails (e.g., only one class in CV fold), use default parameters
+                print(f"Grid search failed. Using default parameters lambda0=0.01, lambda1=0.001")
+                model = LogisticRuleRegression(lambda0=0.01, lambda1=0.001)
+                model.fit(X_few_fb, y_few)
         elif baseline_model_name == 'ttnet':
             features_size = X_few_proc.shape[1]
             model = TTnetStudentModel(features_size=features_size, index=few_index, device=device_for_model)

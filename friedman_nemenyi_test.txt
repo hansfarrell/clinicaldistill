@@ -1,8 +1,8 @@
 Friedman Test with Nemenyi Post-Hoc Analysis
 Friedman Test Results:
 ------------------------------------------------------------
-Test statistic: 392.612
-p-value: 5.563323e-86
+Test statistic: 469.587
+p-value: 1.072848e-102
 Significance level: 0.05
 
 Conclusion: Reject null hypothesis - significant differences found between strategies.
@@ -12,17 +12,17 @@ Nemenyi Post-Hoc Test Results:
 
 Pairwise p-values:
               Baseline        TabPFN          TabM
-Baseline  1.000000e+00  0.000000e+00  3.877591e-01
+Baseline  1.000000e+00  0.000000e+00  2.311544e-02
 TabPFN    0.000000e+00  1.000000e+00  0.000000e+00
-TabM      3.877591e-01  0.000000e+00  1.000000e+00
+TabM      2.311544e-02  0.000000e+00  1.000000e+00
 
 
 Average Ranks (lower is better):
-  Baseline: 2.257
-  TabPFN: 1.539
-  TabM: 2.204
+  Baseline: 2.288
+  TabPFN: 1.525
+  TabM: 2.187
 
 Pairwise Comparison Interpretations (level=0.05):
   Baseline vs TabPFN: Significant difference (p=0.0)
-  Baseline vs TabM: No significant difference (p=0.3877590783189391)
+  Baseline vs TabM: Significant difference (p=0.02311543820120343)
   TabPFN vs TabM: Significant difference (p=0.0)
